@@ -3,6 +3,44 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-08-07
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`super_clipboard` - `v0.10.0-dev.1`](#super_clipboard---v0100-dev1)
+ - [`super_drag_and_drop` - `v0.10.0-dev.1`](#super_drag_and_drop---v0100-dev1)
+ - [`super_context_menu` - `v0.10.0-dev.1`](#super_context_menu---v0100-dev1)
+ - [`super_native_extensions` - `v0.10.0-dev.1`](#super_native_extensions---v0100-dev1)
+ - [`super_hot_key` - `v0.10.0-dev.1`](#super_hot_key---v0100-dev1)
+ - [`super_keyboard_layout` - `v0.10.0-dev.1`](#super_keyboard_layout---v0100-dev1)
+
+---
+
+#### `super_clipboard` - `v0.10.0-dev.1`
+
+#### `super_drag_and_drop` - `v0.10.0-dev.1`
+
+#### `super_context_menu` - `v0.10.0-dev.1`
+
+#### `super_native_extensions` - `v0.10.0-dev.1`
+
+ - Bump "super_native_extensions" to `0.10.0-dev.1`.
+
+#### `super_hot_key` - `v0.10.0-dev.1`
+
+ - Bump "super_hot_key" to `0.10.0-dev.1`.
+
+#### `super_keyboard_layout` - `v0.10.0-dev.1`
+
+
 ## 2025-06-11
 
 ### Changes
