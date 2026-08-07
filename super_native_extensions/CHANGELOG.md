@@ -1,3 +1,7 @@
+## 0.10.0-dev.2
+
+ - Bump "super_native_extensions" to `0.10.0-dev.2`.
+
 ## 0.10.0-dev.1
 
  - Bump "super_native_extensions" to `0.10.0-dev.1`.

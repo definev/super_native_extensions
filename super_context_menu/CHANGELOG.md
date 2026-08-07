@@ -1,3 +1,7 @@
+## 0.10.0-dev.2
+
+ - Bump "super_context_menu" to `0.10.0-dev.2`.
+
 ## 0.10.0-dev.1
 
 ## 0.9.1
