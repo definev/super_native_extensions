@@ -4,7 +4,7 @@
 
 typedef void (*SNEInitFunction)(void);
 
-static void *SNEOpenRustLibrary() {
+static void *SNEOpenRustLibrary(void) {
   static void *handle = NULL;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -19,7 +19,7 @@ static void *SNEOpenRustLibrary() {
   return handle;
 }
 
-static void SNEInitializeRustLibrary() {
+static void SNEInitializeRustLibrary(void) {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     void *handle = SNEOpenRustLibrary();

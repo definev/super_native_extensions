@@ -7,9 +7,9 @@
 typedef void (*SNEInitFunction)(void);
 typedef bool (*SNETextInputFunction)(void);
 
-static void swizzleTextInputPlugin();
+static void swizzleTextInputPlugin(void);
 
-static void *SNEOpenRustLibrary() {
+static void *SNEOpenRustLibrary(void) {
   static void *handle = NULL;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -40,7 +40,7 @@ static void *SNERustSymbol(const char *name) {
   return symbol;
 }
 
-static void SNEInitializeRustLibrary() {
+static void SNEInitializeRustLibrary(void) {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     SNEInitFunction init =
@@ -183,7 +183,7 @@ static void swizzle(SEL originalSelector, Class originalClass,
       class_getInstanceMethod(originalClass, replacementSelector));
 }
 
-static void swizzleTextInputPlugin() {
+static void swizzleTextInputPlugin(void) {
   Class cls = NSClassFromString(@"FlutterTextInputView");
   if (cls == nil) {
     NSLog(@"FlutterTextInputPlugin not found");
