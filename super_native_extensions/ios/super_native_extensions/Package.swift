@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "super_native_extensions",
     platforms: [
-        .iOS("9.0")
+        .iOS("13.0")
     ],
     products: [
         .library(name: "super-native-extensions", targets: ["super_native_extensions"])

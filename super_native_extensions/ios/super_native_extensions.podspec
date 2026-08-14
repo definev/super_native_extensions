@@ -16,7 +16,7 @@ A new Flutter plugin project.
   s.source_files = 'super_native_extensions/Sources/super_native_extensions/**/*.{h,m}'
   s.public_header_files = 'super_native_extensions/Sources/super_native_extensions/include/**/*.h'
   s.dependency 'Flutter'
-  s.platform = :ios, '9.0'
+  s.platform = :ios, '13.0'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

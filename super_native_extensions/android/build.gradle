@@ -1,5 +1,5 @@
-group 'com.superlist.super_native_extensions'
-version '1.0'
+group = 'com.superlist.super_native_extensions'
+version = '1.0'
 
 buildscript {
     repositories {
@@ -22,13 +22,13 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 android {
-    namespace 'com.superlist.super_native_extensions'
+    namespace = 'com.superlist.super_native_extensions'
 
     compileSdk = 36
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {

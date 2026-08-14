@@ -6,15 +6,9 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.os.Build;
-import android.os.SystemClock;
-import android.util.Log;
 import android.view.DragEvent;
-import android.view.InputDevice;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 
@@ -74,17 +68,10 @@ public class DragDropHelper {
             // on failed drop
             updateLastTouchPoint(parent, lastTouchEventX + viewLocation[0], lastTouchEventY + viewLocation[1]);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                view.startDragAndDrop(clipData,
-                        new DragShadowBuilder(bitmap, new Point(touchPointX, touchPointY)), new SessionId(dragSessionId),
-                        flags
-                );
-            } else {
-                view.startDrag(clipData,
-                        new DragShadowBuilder(bitmap, new Point(touchPointX, touchPointY)), new SessionId(dragSessionId),
-                        flags
-                );
-            }
+            view.startDragAndDrop(clipData,
+                    new DragShadowBuilder(bitmap, new Point(touchPointX, touchPointY)), new SessionId(dragSessionId),
+                    flags
+            );
         }
     }
 
