@@ -17,20 +17,21 @@ use crate::{
     api_model::{DropOperation, ImageData, Point, Rect, Size},
     context::Context,
     drag_manager::{GetDragManager, PlatformDragContextId},
-    error::{NativeExtensionsError, NativeExtensionsResult},
+    error::NativeExtensionsResult,
     log::{OkLog, OkLogUnexpected},
     platform_impl::platform::{PlatformDataReader, PlatformDragContext, PlatformDropContext},
     reader_manager::{GetDataReaderManager, RegisteredDataReader},
     value_promise::{Promise, PromiseResult},
+    view_context::PlatformViewContextId,
 };
 
-// Each isolate has its own DropContext.
-pub type PlatformDropContextId = IsolateId;
+pub type PlatformDropContextId = PlatformViewContextId;
 
 pub struct DropManager {
     weak_self: Late<Weak<Self>>,
     invoker: Late<AsyncMethodInvoker>,
     contexts: RefCell<HashMap<PlatformDropContextId, Rc<PlatformDropContext>>>,
+    formats: RefCell<HashMap<IsolateId, Vec<String>>>,
 }
 
 pub trait GetDropManager {
@@ -47,6 +48,8 @@ impl GetDropManager for Context {
 #[irondash(rename_all = "camelCase")]
 struct DropContextInitRequest {
     engine_handle: i64,
+    view_id: i64,
+    native_window_handle: Option<i64>,
 }
 
 #[derive(TryFromValue)]
@@ -169,6 +172,7 @@ impl DropManager {
             weak_self: Late::new(),
             invoker: Late::new(),
             contexts: RefCell::new(HashMap::new()),
+            formats: RefCell::new(HashMap::new()),
         }
         .register("DropManager")
     }
@@ -178,13 +182,15 @@ impl DropManager {
         isolate: IsolateId,
         request: RegisterDropFormatsRequest,
     ) -> NativeExtensionsResult<()> {
-        let context = self
-            .contexts
-            .borrow()
-            .get(&isolate)
-            .cloned()
-            .ok_or(NativeExtensionsError::PlatformContextNotFound)?;
-        context.register_drop_formats(&request.formats)
+        self.formats
+            .borrow_mut()
+            .insert(isolate, request.formats.clone());
+        for (id, context) in self.contexts.borrow().iter() {
+            if id.isolate_id == isolate {
+                context.register_drop_formats(&request.formats)?;
+            }
+        }
+        Ok(())
     }
 
     fn new_context(
@@ -192,18 +198,22 @@ impl DropManager {
         isolate: IsolateId,
         request: DropContextInitRequest,
     ) -> NativeExtensionsResult<()> {
-        if self.contexts.borrow().get(&isolate).is_some() {
+        let id = PlatformViewContextId::new(isolate, request.view_id, request.native_window_handle);
+        if self.contexts.borrow().get(&id).is_some() {
             // Can happen during hot reload
             warn!("DropContext already exists for isolate {:?}", isolate);
             return Ok(());
         }
         let context = Rc::new(PlatformDropContext::new(
-            isolate,
+            id,
             request.engine_handle,
             self.weak_self.clone(),
         )?);
+        if let Some(formats) = self.formats.borrow().get(&isolate) {
+            context.register_drop_formats(formats)?;
+        }
         context.assign_weak_self(Rc::downgrade(&context));
-        self.contexts.borrow_mut().insert(isolate, context);
+        self.contexts.borrow_mut().insert(id, context);
         Ok(())
     }
 
@@ -218,7 +228,11 @@ impl DropManager {
     ) -> NativeExtensionsResult<ItemPreviewResponse> {
         let result = self
             .invoker
-            .call_method_cv(id, "getPreviewForItem", request)
+            .call_method_cv(
+                id.isolate_id,
+                "getPreviewForItem",
+                with_view_id(id, request),
+            )
             .await?;
         Ok(result)
     }
@@ -248,7 +262,10 @@ impl AsyncMethodHandler for DropManager {
     }
 
     fn on_isolate_destroyed(&self, isolate: IsolateId) {
-        self.contexts.borrow_mut().remove(&isolate);
+        self.contexts
+            .borrow_mut()
+            .retain(|id, _| id.isolate_id != isolate);
+        self.formats.borrow_mut().remove(&isolate);
     }
 }
 
@@ -263,8 +280,12 @@ impl PlatformDropContextDelegate for DropManager {
         event: DropEvent,
         res: Box<dyn FnOnce(Result<DropOperation, MethodCallError>)>,
     ) {
-        self.invoker
-            .call_method_sync_cv(id, "onDropUpdate", event, res);
+        self.invoker.call_method_sync_cv(
+            id.isolate_id,
+            "onDropUpdate",
+            with_view_id(id, event),
+            res,
+        );
     }
 
     fn send_perform_drop(
@@ -273,8 +294,11 @@ impl PlatformDropContextDelegate for DropManager {
         event: DropEvent,
         res: Box<dyn FnOnce(Result<(), MethodCallError>)>,
     ) {
-        self.invoker
-            .call_method_sync_cv(id, "onPerformDrop", event, |r| {
+        self.invoker.call_method_sync_cv(
+            id.isolate_id,
+            "onPerformDrop",
+            with_view_id(id, event),
+            |r| {
                 // Delay result callback one run loop turn. This is necessary because
                 // AsyncMethodHandler::on_message executes messages using RunLoop::spawn,
                 // whcih means that calls such as PlatformReader::get_data_for_item are delayed
@@ -283,19 +307,20 @@ impl PlatformDropContextDelegate for DropManager {
                 // Not doing so would result in race condition on iOS where drop data
                 // must only be received during perform_drop.
                 RunLoop::current().schedule_next(move || res(r)).detach();
-            });
+            },
+        );
     }
 
     fn send_drop_leave(&self, id: PlatformDropContextId, event: BaseDropEvent) {
         self.invoker
-            .call_method_sync(id, "onDropLeave", event, |r| {
+            .call_method_sync(id.isolate_id, "onDropLeave", with_view_id(id, event), |r| {
                 r.ok_log();
             });
     }
 
     fn send_drop_ended(&self, id: PlatformDropContextId, event: BaseDropEvent) {
         self.invoker
-            .call_method_sync(id, "onDropEnded", event, |r| {
+            .call_method_sync(id.isolate_id, "onDropEnded", with_view_id(id, event), |r| {
                 r.ok_log();
             });
     }
@@ -307,7 +332,7 @@ impl PlatformDropContextDelegate for DropManager {
     ) -> RegisteredDataReader {
         Context::get()
             .data_reader_manager()
-            .register_platform_reader(platform_reader, id)
+            .register_platform_reader(platform_reader, id.isolate_id)
     }
 
     fn get_preview_for_item(
@@ -335,4 +360,13 @@ impl PlatformDropContextDelegate for DropManager {
         });
         res
     }
+}
+
+fn with_view_id<T: Into<Value>>(id: PlatformViewContextId, value: T) -> Value {
+    let Value::Map(entries) = value.into() else {
+        unreachable!("derived drag and drop messages must serialize to a map")
+    };
+    let mut entries: Vec<(Value, Value)> = entries.into();
+    entries.push(("viewId".into(), id.view_id.into()));
+    Value::Map(entries.into())
 }

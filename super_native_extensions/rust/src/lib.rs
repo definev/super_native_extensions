@@ -48,6 +48,7 @@ mod shadow;
 mod util;
 mod value_coerce;
 mod value_promise;
+mod view_context;
 
 #[allow(dead_code)]
 mod segmented_queue;

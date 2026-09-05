@@ -13,6 +13,7 @@ edition = "2021"
 resolver = "2"
 
 [lib]
+name = "super_native_extensions_native"
 crate-type = ["cdylib", "staticlib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

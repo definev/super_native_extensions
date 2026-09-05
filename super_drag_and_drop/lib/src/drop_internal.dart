@@ -99,6 +99,7 @@ class _DropSession extends DropSession {
 
   Future<raw.DropOperation> update({
     required ui.Offset position,
+    required int viewId,
     required Set<raw.DropOperation> allowedOperations,
   }) async {
     _allowedOperations.clear();
@@ -106,9 +107,7 @@ class _DropSession extends DropSession {
     _inside = true;
 
     final hitTest = HitTestResult();
-    // TODO(knopp): Resolve when we can provide viewId from native side
-    // ignore: deprecated_member_use
-    GestureBinding.instance.hitTest(hitTest, position);
+    GestureBinding.instance.hitTestInView(hitTest, position, viewId);
 
     final monitorsInHitTest = <RenderDropMonitor>{};
     RenderDropRegion? dropRegion;
@@ -264,25 +263,28 @@ class _DropItemPreviewRequest extends DropItemPreviewRequest {
 class _DropContextDelegate extends raw.DropContextDelegate {
   @override
   Future<void> onDropEnded(raw.BaseDropEvent event) async {
-    final session = _sessions.remove(event.sessionId);
+    final session = _sessions.remove((event.viewId, event.sessionId));
     session?.dispose();
   }
 
   @override
   Future<void> onDropLeave(raw.BaseDropEvent event) async {
-    _sessions[event.sessionId]?.leave();
+    _sessions[(event.viewId, event.sessionId)]?.leave();
   }
 
   @override
   Future<raw.DropOperation> onDropUpdate(raw.DropEvent event) async {
-    final session =
-        _sessions.putIfAbsent(event.sessionId, () => _DropSession());
+    final session = _sessions.putIfAbsent(
+      (event.viewId, event.sessionId),
+      () => _DropSession(),
+    );
     await session.updateItems(
       event.items,
       isDrop: false,
     );
     return session.update(
       position: event.locationInView,
+      viewId: event.viewId,
       allowedOperations: Set.from(event.allowedOperations),
     );
   }
@@ -290,13 +292,13 @@ class _DropContextDelegate extends raw.DropContextDelegate {
   @override
   Future<raw.ItemPreview?> onGetItemPreview(
       raw.ItemPreviewRequest request) async {
-    final session = _sessions[request.sessionId];
+    final session = _sessions[(request.viewId, request.sessionId)];
     return session?.getDropItemPreview(request);
   }
 
   @override
   Future<void> onPerformDrop(raw.DropEvent event) async {
-    final session = _sessions[event.sessionId];
+    final session = _sessions[(event.viewId, event.sessionId)];
     await session?.updateItems(event.items, isDrop: true);
     await session?.performDrop(
       location: event.locationInView,
@@ -304,7 +306,7 @@ class _DropContextDelegate extends raw.DropContextDelegate {
     );
   }
 
-  final _sessions = <int, _DropSession>{};
+  final _sessions = <(int, int), _DropSession>{};
 }
 
 class DropFormatRegistry {
@@ -328,6 +330,14 @@ class DropFormatRegistry {
     _registeredFormats[registration] = formats;
     _updateIfNeeded();
     return registration;
+  }
+
+  void registerView(ui.FlutterView view) async {
+    final context = await raw.DropContext.instance();
+    await context.registerView(view);
+    // Drag context is required on macOS for local data and drag completion.
+    final dragContext = await raw.DragContext.instance();
+    await dragContext.registerView(view);
   }
 
   void _unregister(DropFormatRegistration registration) {

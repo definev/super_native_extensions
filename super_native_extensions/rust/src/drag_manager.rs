@@ -27,10 +27,10 @@ use crate::{
     },
     util::{DropNotifier, NextId},
     value_promise::{Promise, PromiseResult},
+    view_context::PlatformViewContextId,
 };
 
-// Each isolate has its own DragContext.
-pub type PlatformDragContextId = IsolateId;
+pub type PlatformDragContextId = PlatformViewContextId;
 
 pub struct DataProviderEntry {
     pub provider: Rc<PlatformDataProvider>,
@@ -123,12 +123,15 @@ impl GetDragManager for Context {
 #[irondash(rename_all = "camelCase")]
 struct DragContextInitRequest {
     engine_handle: i64,
+    view_id: i64,
+    native_window_handle: Option<i64>,
 }
 
 #[derive(TryFromValue)]
 #[irondash(rename_all = "camelCase")]
 pub struct LocalDataRequest {
     session_id: DragSessionId,
+    view_id: i64,
 }
 
 impl DragManager {
@@ -147,18 +150,19 @@ impl DragManager {
         isolate: IsolateId,
         request: DragContextInitRequest,
     ) -> NativeExtensionsResult<()> {
-        if self.contexts.borrow().get(&isolate).is_some() {
+        let id = PlatformViewContextId::new(isolate, request.view_id, request.native_window_handle);
+        if self.contexts.borrow().get(&id).is_some() {
             // Can happen during hot reload
             warn!("DragContext already exists for isolate {:?}", isolate);
             return Ok(());
         }
         let context = Rc::new(PlatformDragContext::new(
-            isolate,
+            id,
             request.engine_handle,
             self.weak_self.clone(),
         )?);
         context.assign_weak_self(Rc::downgrade(&context));
-        self.contexts.borrow_mut().insert(isolate, context);
+        self.contexts.borrow_mut().insert(id, context);
         Ok(())
     }
 
@@ -168,7 +172,7 @@ impl DragManager {
 
     fn build_data_provider_map(
         &self,
-        isolate: IsolateId,
+        id: PlatformDragContextId,
         items: &Vec<DragItem>,
     ) -> NativeExtensionsResult<HashMap<DataProviderId, DataProviderEntry>> {
         let mut map = HashMap::new();
@@ -181,8 +185,8 @@ impl DragManager {
             let handle: DataProviderHandle = DropNotifier::new(move || {
                 if let Some(this) = weak_self.upgrade() {
                     // Isolate could have been destroyed in the meanwhile.
-                    if this.contexts.borrow().contains_key(&isolate) {
-                        this.release_data_provider(isolate, provider_id);
+                    if this.contexts.borrow().contains_key(&id) {
+                        this.release_data_provider(id.isolate_id, provider_id);
                     }
                 }
             })
@@ -209,6 +213,7 @@ impl DragManager {
         struct DragConfigurationRequest {
             session_id: DragSessionId,
             location: Point,
+            view_id: i64,
         }
         #[derive(TryFromValue, Debug)]
         #[irondash(rename_all = "camelCase")]
@@ -219,11 +224,12 @@ impl DragManager {
         let configuration: DragConfigurationResponse = self
             .invoker
             .call_method_cv(
-                id,
+                id.isolate_id,
                 "getConfigurationForDragRequest",
                 DragConfigurationRequest {
                     location,
                     session_id,
+                    view_id: id.view_id,
                 },
             )
             .await?;
@@ -252,6 +258,7 @@ impl DragManager {
         struct AdditionalItemsRequest {
             session_id: DragSessionId,
             location: Point,
+            view_id: i64,
         }
         #[derive(TryFromValue, Debug)]
         #[irondash(rename_all = "camelCase")]
@@ -261,11 +268,12 @@ impl DragManager {
         let response: AdditionalItemsResponse = self
             .invoker
             .call_method_cv(
-                id,
+                id.isolate_id,
                 "getAdditionalItemsForLocation",
                 AdditionalItemsRequest {
                     location,
                     session_id,
+                    view_id: id.view_id,
                 },
             )
             .await?;
@@ -287,13 +295,17 @@ impl DragManager {
         #[irondash(rename_all = "camelCase")]
         struct LocationDraggableRequest {
             location: Point,
+            view_id: i64,
         }
         let result: bool = self
             .invoker
             .call_method_cv(
-                id,
+                id.isolate_id,
                 "isLocationDraggable",
-                LocationDraggableRequest { location },
+                LocationDraggableRequest {
+                    location,
+                    view_id: id.view_id,
+                },
             )
             .await?;
         Ok(result)
@@ -304,14 +316,15 @@ impl DragManager {
         isolate: IsolateId,
         request: DragRequest,
     ) -> NativeExtensionsResult<DragSessionId> {
+        let id = PlatformViewContextId::new(isolate, request.view_id, None);
         let context = self
             .contexts
             .borrow()
-            .get(&isolate)
+            .get(&id)
             .cloned()
             .ok_or(NativeExtensionsError::PlatformContextNotFound)?;
         let session_id = DragSessionId(self.next_session_id.next_id());
-        let provider_map = self.build_data_provider_map(isolate, &request.configuration.items)?;
+        let provider_map = self.build_data_provider_map(id, &request.configuration.items)?;
         context
             .start_drag(request, provider_map, session_id)
             .await?;
@@ -323,10 +336,11 @@ impl DragManager {
         isolate: IsolateId,
         request: LocalDataRequest,
     ) -> NativeExtensionsResult<Option<Vec<Value>>> {
+        let id = PlatformViewContextId::new(isolate, request.view_id, None);
         let context = self
             .contexts
             .borrow()
-            .get(&isolate)
+            .get(&id)
             .cloned()
             .ok_or(NativeExtensionsError::PlatformContextNotFound)?;
         match context.get_local_data_for_session_id(request.session_id) {
@@ -377,7 +391,9 @@ impl AsyncMethodHandler for DragManager {
     }
 
     fn on_isolate_destroyed(&self, isolate: IsolateId) {
-        self.contexts.borrow_mut().remove(&isolate);
+        self.contexts
+            .borrow_mut()
+            .retain(|id, _| id.isolate_id != isolate);
     }
 }
 
@@ -491,13 +507,15 @@ impl PlatformDragContextDelegate for DragManager {
         struct DragMoveRequest {
             session_id: DragSessionId,
             screen_location: Point,
+            view_id: i64,
         }
         self.invoker.call_method_sync(
-            id,
+            id.isolate_id,
             "dragSessionDidMove",
             DragMoveRequest {
                 session_id,
                 screen_location,
+                view_id: id.view_id,
             },
             |r| {
                 r.ok_log();
@@ -516,14 +534,16 @@ impl PlatformDragContextDelegate for DragManager {
         struct DragEndRequest {
             session_id: DragSessionId,
             drop_operation: DropOperation,
+            view_id: i64,
         }
 
         self.invoker.call_method_sync(
-            id,
+            id.isolate_id,
             "dragSessionDidEnd",
             DragEndRequest {
                 session_id,
                 drop_operation: operation,
+                view_id: id.view_id,
             },
             |r| {
                 r.ok_log();

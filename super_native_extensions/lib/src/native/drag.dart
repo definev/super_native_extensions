@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:irondash_message_channel/irondash_message_channel.dart';
@@ -15,6 +14,7 @@ import '../util.dart';
 import '../widget_snapshot/widget_snapshot.dart';
 import 'image_data.dart';
 import 'context.dart';
+import 'view_context.dart';
 
 extension DragConfigurationExt on DragConfiguration {
   Future<dynamic> serialize() async => {
@@ -60,11 +60,12 @@ class DragSessionImpl extends DragSession {
   ValueListenable<ui.Offset?> get lastScreenLocation => _lastScreenLocation;
 
   int? sessionId;
+  int? viewId;
 
   @override
   Future<List<Object?>?> getLocalData() async {
-    if (sessionId != null) {
-      return dragContext.getLocalData(sessionId!);
+    if (sessionId != null && viewId != null) {
+      return dragContext.getLocalData(sessionId!, viewId!);
     } else {
       return [];
     }
@@ -91,15 +92,40 @@ class DragContextImpl extends DragContext {
 
   final _sessions = <int, DragSessionImpl>{};
   final _dataProviders = <int, DataProviderHandle>{};
+  final _registeredViews = <int, Future<void>>{};
 
   @override
   Future<void> initialize() async {
     super.initialize();
-    final engineHandle = await EngineContext.instance.getEngineHandle();
     _channel.setMethodCallHandler(_handleMethodCall);
-    await _channel.invokeMethod('newContext', {
-      'engineHandle': engineHandle,
-    });
+    final implicitView =
+        WidgetsBinding.instance.platformDispatcher.implicitView;
+    if (implicitView != null) {
+      await registerView(implicitView);
+    }
+  }
+
+  @override
+  Future<void> registerView(ui.FlutterView view) async {
+    final existing = _registeredViews[view.viewId];
+    if (existing != null) {
+      return existing;
+    }
+    final descriptor = await NativeViewContextDescriptor.create(view);
+    if (!descriptor.hasNativeView) {
+      return;
+    }
+    final registration = _channel.invokeMethod<void>(
+      'newContext',
+      descriptor.serialize(),
+    );
+    _registeredViews[view.viewId] = registration;
+    try {
+      await registration;
+    } catch (_) {
+      _registeredViews.remove(view.viewId);
+      rethrow;
+    }
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
@@ -107,10 +133,12 @@ class DragContextImpl extends DragContext {
       return handleError(() async {
         final arguments = call.arguments as Map;
         final location = OffsetExt.deserialize(arguments['location']);
+        final viewId = arguments['viewId'] as int;
         final sessionId = arguments['sessionId'];
-        final session = DragSessionImpl(dragContext: this);
+        final session = DragSessionImpl(dragContext: this)..viewId = viewId;
         final configuration = await delegate?.getConfigurationForDragRequest(
           location: location,
+          viewId: viewId,
           session: session,
         );
         if (configuration != null) {
@@ -130,12 +158,14 @@ class DragContextImpl extends DragContext {
       return handleError(() async {
         final arguments = call.arguments as Map;
         final location = OffsetExt.deserialize(arguments['location']);
+        final viewId = arguments['viewId'] as int;
         final sessionId = arguments['sessionId'];
         final session = _sessions[sessionId];
         List<DragItem>? items;
         if (session != null) {
           items = await delegate?.getAdditionalItemsForLocation(
             location: location,
+            viewId: viewId,
             session: session,
           );
         }
@@ -158,7 +188,8 @@ class DragContextImpl extends DragContext {
       return handleError(() async {
         final arguments = call.arguments as Map;
         final location = OffsetExt.deserialize(arguments['location']);
-        return delegate?.isLocationDraggable(location) ?? false;
+        final viewId = arguments['viewId'] as int;
+        return delegate?.isLocationDraggable(location, viewId) ?? false;
       }, () => false);
     } else if (call.method == 'releaseDataProvider') {
       return handleError(() async {
@@ -216,9 +247,10 @@ class DragContextImpl extends DragContext {
     session.dispose();
   }
 
-  Future<List<Object?>?> getLocalData(int sessionId) async {
+  Future<List<Object?>?> getLocalData(int sessionId, int viewId) async {
     return _channel.invokeMethod('getLocalData', {
       'sessionId': sessionId,
+      'viewId': viewId,
     });
   }
 
@@ -230,6 +262,8 @@ class DragContextImpl extends DragContext {
     required Offset position,
     TargetedWidgetSnapshot? combinedDragImage,
   }) async {
+    final view = View.of(buildContext);
+    await registerView(view);
     final needsCombinedDragImage =
         (await _channel.invokeMethod('needsCombinedDragImage')) as bool;
     final request = DragRequest(
@@ -241,12 +275,15 @@ class DragContextImpl extends DragContext {
           : null,
     );
 
+    final serializedRequest = await request.serialize() as Map;
+    serializedRequest['viewId'] = view.viewId;
     final sessionId = await _channel.invokeMethod(
       "startDrag",
-      await request.serialize(),
+      serializedRequest,
     );
     final sessionImpl = session as DragSessionImpl;
     sessionImpl.sessionId = sessionId;
+    sessionImpl.viewId = view.viewId;
     _sessions[sessionId] = sessionImpl;
     for (final item in request.configuration.items) {
       _dataProviders[item.dataProvider.id] = item.dataProvider;

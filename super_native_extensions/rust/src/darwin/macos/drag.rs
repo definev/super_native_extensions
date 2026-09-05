@@ -19,13 +19,13 @@ use crate::{
 
 use super::{
     drag_common::DropOperationExt,
+    flutter_view_for_context,
     util::{class_builder_from_name, flip_rect, ns_image_from_image_data, EventExt},
 };
 
 use core_foundation::base::CFRelease;
 use core_graphics::event::{CGEventField, CGEventType};
 
-use irondash_engine_context::EngineContext;
 use irondash_message_channel::Value;
 use irondash_run_loop::{platform::PollSession, RunLoop};
 use objc2_app_kit::{
@@ -83,11 +83,11 @@ impl PlatformDragContext {
         delegate: Weak<dyn PlatformDragContextDelegate>,
     ) -> NativeExtensionsResult<Self> {
         ONCE.call_once(prepare_flutter);
-        let view = EngineContext::get()?.get_flutter_view(engine_handle)?;
+        let view = flutter_view_for_context(id, engine_handle)?;
         Ok(Self {
             id,
             delegate,
-            view: unsafe { Id::cast(view) },
+            view,
             last_mouse_down_event: RefCell::new(None),
             last_mouse_up_event: RefCell::new(None),
             last_scroll_event: RefCell::new(None),

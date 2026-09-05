@@ -204,6 +204,7 @@ impl DragConfiguration {
 #[derive(TryFromValue)]
 #[irondash(rename_all = "camelCase")]
 pub struct DragRequest {
+    pub view_id: i64,
     pub configuration: DragConfiguration,
     pub combined_drag_image: Option<TargettedImage>,
     pub position: Point,

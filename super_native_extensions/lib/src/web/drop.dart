@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
@@ -122,6 +123,9 @@ class DropContextImpl extends DropContext {
   int? _sessionId;
   var lastOperation = DropOperation.none;
 
+  int get _viewId =>
+      WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ?? 0;
+
   void _onDragEnter(web.DataTransfer transfer, web.MouseEvent event) {
     _sessionId = _nextSessionId++;
     _onDragOver(transfer, event);
@@ -134,6 +138,7 @@ class DropContextImpl extends DropContext {
 
     final dropEvent = DropEvent(
       sessionId: _sessionId!,
+      viewId: _viewId,
       locationInView: Offset(event.pageX.toDouble(), event.pageY.toDouble()),
       allowedOperations: _translateAllowedEffect(transfer.effectAllowed),
       items: _translateDataTransfer(
@@ -159,8 +164,12 @@ class DropContextImpl extends DropContext {
     _sessionId = null;
     if (sessionId != null) {
       await _mutex.protect(() async {
-        await delegate?.onDropLeave(BaseDropEvent(sessionId: sessionId));
-        await delegate?.onDropEnded(BaseDropEvent(sessionId: sessionId));
+        await delegate?.onDropLeave(
+          BaseDropEvent(sessionId: sessionId, viewId: _viewId),
+        );
+        await delegate?.onDropEnded(
+          BaseDropEvent(sessionId: sessionId, viewId: _viewId),
+        );
       });
     }
   }
@@ -168,6 +177,7 @@ class DropContextImpl extends DropContext {
   void _onDrop(web.DataTransfer transfer, web.MouseEvent event) async {
     final dropEvent = DropEvent(
       sessionId: _sessionId!,
+      viewId: _viewId,
       locationInView: Offset(event.pageX.toDouble(), event.pageY.toDouble()),
       allowedOperations: _translateAllowedEffect(transfer.effectAllowed),
       items: _translateDataTransfer(
@@ -263,6 +273,9 @@ class DropContextImpl extends DropContext {
   @override
   Future<void> registerDropFormats(List<String> formats) async {}
 
+  @override
+  Future<void> registerView(ui.FlutterView view) async {}
+
   DropEvent _createLocalDropEvent({
     required DragConfiguration configuration,
     required Offset position,
@@ -279,6 +292,7 @@ class DropContextImpl extends DropContext {
 
     return DropEvent(
       sessionId: identityHashCode(configuration),
+      viewId: _viewId,
       locationInView: position,
       allowedOperations: configuration.allowedOperations,
       items: configuration.items
@@ -332,7 +346,10 @@ class DropContextImpl extends DropContext {
 
   void localSessionDidEnd(DragConfiguration configuration) {
     _mutex.protect(() async {
-      final event = BaseDropEvent(sessionId: identityHashCode(configuration));
+      final event = BaseDropEvent(
+        sessionId: identityHashCode(configuration),
+        viewId: _viewId,
+      );
       await delegate?.onDropLeave(event);
       await delegate?.onDropEnded(event);
     });

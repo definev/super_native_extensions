@@ -275,7 +275,11 @@ class DragContextImpl extends DragContext {
             event.offsetX.toDouble(),
             event.offsetY.toDouble(),
           );
-          final draggable = delegate?.isLocationDraggable(offset) ?? false;
+          final viewId =
+              WidgetsBinding.instance.platformDispatcher.implicitView?.viewId ??
+              0;
+          final draggable =
+              delegate?.isLocationDraggable(offset, viewId) ?? false;
           if (draggable) {
             event.preventDefault();
           }
@@ -290,6 +294,9 @@ class DragContextImpl extends DragContext {
   @override
   DragSession newSession({int? pointer}) =>
       DragSessionImpl(pointer: pointer ?? -1);
+
+  @override
+  Future<void> registerView(ui.FlutterView view) async {}
 
   @override
   void cancelSession(DragSession session) {

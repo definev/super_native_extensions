@@ -51,6 +51,7 @@ class LongPressHandler {
       final dragConfiguration = _dragContext.delegate
           ?.getConfigurationForDragRequest(
             location: position,
+            viewId: View.of(context).viewId,
             session: session,
           );
       final menuConfiguration = _menuContext.delegate?.getMenuConfiguration(

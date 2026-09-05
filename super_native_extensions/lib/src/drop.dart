@@ -36,14 +36,17 @@ enum DropOperation {
 class BaseDropEvent {
   BaseDropEvent({
     required this.sessionId,
+    required this.viewId,
   });
 
   @override
   String toString() => {
     'sessionId': sessionId,
+    'viewId': viewId,
   }.toString();
 
   final int sessionId;
+  final int viewId;
 }
 
 class DropItem {
@@ -70,6 +73,7 @@ class DropItem {
 class DropEvent extends BaseDropEvent {
   DropEvent({
     required super.sessionId,
+    required super.viewId,
     required this.locationInView,
     required this.allowedOperations,
     required this.items,
@@ -122,6 +126,7 @@ class ItemPreview {
 class ItemPreviewRequest {
   ItemPreviewRequest({
     required this.sessionId,
+    required this.viewId,
     required this.itemId,
     required this.size,
     required this.fadeOutDelay,
@@ -132,6 +137,7 @@ class ItemPreviewRequest {
     final map = request as Map;
     return ItemPreviewRequest(
       sessionId: map['sessionId'] as int,
+      viewId: map['viewId'] as int,
       itemId: map['itemId'] as int,
       size: SizeExt.deserialize(map['size']),
       fadeOutDelay: DurationExt.fromSeconds(map['fadeOutDelay'] as double),
@@ -142,6 +148,7 @@ class ItemPreviewRequest {
   }
 
   final int sessionId;
+  final int viewId;
   final int itemId;
   final ui.Size size;
 
@@ -177,6 +184,11 @@ abstract class DropContext {
   Future<void> initialize();
 
   Future<void> registerDropFormats(List<String> formats);
+
+  /// Ensures native drag and drop state exists for [view].
+  ///
+  /// Registration is idempotent for a view within the current isolate.
+  Future<void> registerView(ui.FlutterView view);
 
   DropContextDelegate? delegate;
 

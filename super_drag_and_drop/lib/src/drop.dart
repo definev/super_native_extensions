@@ -184,6 +184,7 @@ class DropRegion extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
+    DropFormatRegistry.instance.registerView(View.of(context));
     switch (renderObjectType) {
       case RenderObjectType.box:
         return RenderDropRegionBox(
@@ -214,6 +215,7 @@ class DropRegion extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(
       BuildContext context, covariant RenderObject renderObject) {
+    DropFormatRegistry.instance.registerView(View.of(context));
     final renderObject_ = renderObject as RenderDropRegion;
     if (renderObject_ is RenderProxyBoxWithHitTestBehavior) {
       (renderObject_ as RenderProxyBoxWithHitTestBehavior).behavior =
@@ -274,6 +276,7 @@ class DropMonitor extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
+    DropFormatRegistry.instance.registerView(View.of(context));
     switch (renderObjectType) {
       case RenderObjectType.box:
         return RenderDropMonitorBox(
@@ -296,6 +299,7 @@ class DropMonitor extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(
       BuildContext context, covariant RenderObject renderObject) {
+    DropFormatRegistry.instance.registerView(View.of(context));
     final renderObject_ = renderObject as RenderDropMonitor;
     if (renderObject_ is RenderProxyBoxWithHitTestBehavior) {
       (renderObject_ as RenderProxyBoxWithHitTestBehavior).behavior =

@@ -110,16 +110,18 @@ abstract class DragSession {
 abstract class DragContextDelegate {
   Future<DragConfiguration?>? getConfigurationForDragRequest({
     required ui.Offset location,
+    required int viewId,
     // session will be unused if null handle is returned
     required DragSession session,
   });
 
   Future<List<DragItem>?> getAdditionalItemsForLocation({
     required ui.Offset location,
+    required int viewId,
     required DragSession session,
   });
 
-  bool isLocationDraggable(ui.Offset location);
+  bool isLocationDraggable(ui.Offset location, int viewId);
 }
 
 abstract class DragContext {
@@ -147,6 +149,11 @@ abstract class DragContext {
 
   DragSession newSession({int? pointer});
   void cancelSession(DragSession session);
+
+  /// Ensures native drag and drop state exists for [view].
+  ///
+  /// Registration is idempotent for a view within the current isolate.
+  Future<void> registerView(ui.FlutterView view);
 
   Future<void> startDrag({
     required BuildContext buildContext,

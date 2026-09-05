@@ -6,7 +6,6 @@ use std::{
 };
 
 use block2::RcBlock;
-use irondash_engine_context::EngineContext;
 use irondash_message_channel::{Late, Value};
 use irondash_run_loop::{platform::PollSession, RunLoop};
 use objc2::{
@@ -34,7 +33,10 @@ use crate::{
     value_promise::PromiseResult,
 };
 
-use super::{drag_common::DropOperationExt, util::class_builder_from_name, PlatformDataReader};
+use super::{
+    drag_common::DropOperationExt, flutter_view_for_context, util::class_builder_from_name,
+    PlatformDataReader,
+};
 
 pub struct PlatformDropContext {
     id: PlatformDropContextId,
@@ -268,11 +270,11 @@ impl PlatformDropContext {
         delegate: Weak<dyn PlatformDropContextDelegate>,
     ) -> NativeExtensionsResult<Self> {
         ONCE.call_once(prepare_flutter);
-        let view = EngineContext::get()?.get_flutter_view(engine_handle)?;
+        let view = flutter_view_for_context(id, engine_handle)?;
         Ok(Self {
             id,
             weak_self: Late::new(),
-            view: unsafe { Id::cast(view) },
+            view,
             delegate,
             sessions: RefCell::new(HashMap::new()),
         })

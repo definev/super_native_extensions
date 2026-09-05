@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -24,7 +27,7 @@ class BaseDraggableRenderWidget extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    _initializeIfNeeded();
+    _initializeIfNeeded(View.of(context));
     return _RenderBaseDraggable(
       behavior: hitTestBehavior,
       devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
@@ -37,6 +40,7 @@ class BaseDraggableRenderWidget extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(
       BuildContext context, covariant RenderObject renderObject) {
+    _initializeIfNeeded(View.of(context));
     final renderObject_ = renderObject as _RenderBaseDraggable;
     renderObject_.behavior = hitTestBehavior;
     renderObject_.devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
@@ -67,12 +71,11 @@ class _DragContextDelegate implements raw.DragContextDelegate {
   @override
   Future<raw.DragConfiguration?> getConfigurationForDragRequest({
     required Offset location,
+    required int viewId,
     required raw.DragSession session,
   }) async {
     final hitTest = HitTestResult();
-    // TODO(knopp): Resolve when we can provide viewId from native side
-    // ignore: deprecated_member_use
-    GestureBinding.instance.hitTest(hitTest, location);
+    GestureBinding.instance.hitTestInView(hitTest, location, viewId);
     for (final item in hitTest.path) {
       final target = item.target;
       if (target is _RenderBaseDraggable &&
@@ -89,11 +92,11 @@ class _DragContextDelegate implements raw.DragContextDelegate {
 
   @override
   Future<List<raw.DragItem>?> getAdditionalItemsForLocation(
-      {required Offset location, required raw.DragSession session}) async {
+      {required Offset location,
+      required int viewId,
+      required raw.DragSession session}) async {
     final hitTest = HitTestResult();
-    // TODO(knopp): Resolve when we can provide viewId from native side
-    // ignore: deprecated_member_use
-    GestureBinding.instance.hitTest(hitTest, location);
+    GestureBinding.instance.hitTestInView(hitTest, location, viewId);
     for (final item in hitTest.path) {
       final target = item.target;
       if (target is _RenderBaseDraggable) {
@@ -108,11 +111,9 @@ class _DragContextDelegate implements raw.DragContextDelegate {
   }
 
   @override
-  bool isLocationDraggable(Offset location) {
+  bool isLocationDraggable(Offset location, int viewId) {
     final hitTest = HitTestResult();
-    // TODO(knopp): Resolve when we can provide viewId from native side
-    // ignore: deprecated_member_use
-    GestureBinding.instance.hitTest(hitTest, location);
+    GestureBinding.instance.hitTestInView(hitTest, location, viewId);
     for (final item in hitTest.path) {
       final target = item.target;
       if (target is _RenderBaseDraggable) {
@@ -395,17 +396,18 @@ class MobileDragDetector extends _DragDetector {
   }
 }
 
-bool _initialized = false;
 raw.DragContext? _dragContext;
 raw.LongPressHandler? _longPressHandler;
 
-void _initializeIfNeeded() async {
-  if (!_initialized) {
-    _initialized = true;
-    _dragContext = await raw.DragContext.instance();
-    _dragContext!.delegate = _DragContextDelegate();
-    _longPressHandler = await raw.LongPressHandler.create();
-    // needed on some platforms (i.e. Android for drop end notifications)
-    await raw.DropContext.instance();
+void _initializeIfNeeded(ui.FlutterView view) async {
+  _dragContext ??= await raw.DragContext.instance();
+  _dragContext!.delegate ??= _DragContextDelegate();
+  await _dragContext!.registerView(view);
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    _longPressHandler ??= await raw.LongPressHandler.create();
   }
+  // Needed on some platforms (i.e. Android for drop end notifications).
+  final dropContext = await raw.DropContext.instance();
+  await dropContext.registerView(view);
 }
